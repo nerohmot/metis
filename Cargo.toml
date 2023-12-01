@@ -1,0 +1,13 @@
+[package]
+name = "metis"
+version = "0.1.0"
+authors = ["Tom Hören <horen.tom@gmail.com>"]
+description = "finger exercise in rust"
+keywords = ["semiconductor", "test-equipment", "manufacturing"]
+categories = ["parser-implementations", "encoding"]
+license = "MIT-LICENSE"
+
+[dependencies]
+byte = "0.2"
+
+
