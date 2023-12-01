@@ -1,6 +1,6 @@
 # metis
 
-Streaming conversion from [STDF](https://en.wikipedia.org/wiki/Standard_Test_Data_Format) to [pandas](https://pandas.pydata.org/) [dataframe](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html)s in [HDF5](https://www.hdfgroup.org/solutions/hdf5/) containers.
+Real-time conversion from [STDF](https://en.wikipedia.org/wiki/Standard_Test_Data_Format) to [polars](https://pola.rs/) dataframe(s) that end up saved as [parquet](https://parquet.apache.org/) files or maybe as a n [HDF5](https://www.hdfgroup.org/solutions/hdf5/) containers.
 
 [![CI](https://github.com/Semi-ATE/Metis/workflows/CI/badge.svg?branch=main)](https://github.com/Semi-ATE/Metis/actions?query=workflow%3ACI)
 [![CD](https://github.com/Semi-ATE/Metis/workflows/CD/badge.svg)](https://github.com/Semi-ATE/Metis/actions?query=workflow%3ACD)
