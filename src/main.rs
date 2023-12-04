@@ -16,6 +16,20 @@ enum Endian {
     Little,
 }
 
+enum RecordType {
+    ATR,
+    FTR,
+    Unknown,
+}
+
+fn determine_type(buf: &Vec<u8>) -> RecordType{
+    match (buf[0], buf[1]){
+        (0, 10) => RecordType::ATR,
+        _ => RecordType::Unknown,
+    } 
+}
+
+
 fn determine_endian(buf: &[u8;2], expected_value: u16) -> Endian {
     if cfg!(target_endian = "big") {
         let be_conversion = u16::from_be_bytes(*buf);
@@ -89,50 +103,164 @@ impl STDReader {
         })
     }
 
-
+    ///
+    /// returns the number of bytes available *AFTER** file_pointer.
+    /// panics if the file is shorter than file_pointer.
     /// 
-    /// Given two bytes and the expected value, returns the endian.
+    fn bytes_available(&mut self) -> u64 {
+        let bytes_in_file = self.file.seek(SeekFrom::End(0)).unwrap();
+        if bytes_in_file < self.file_pointer {
+            panic!("file '{}' turncated mid process!", self.file_path.file_name().unwrap().to_string_lossy())
+        }
+        if self.file.seek(SeekFrom::Start(self.file_pointer)).is_err(){
+
+        };
+        (bytes_in_file - self.file_pointer) as u64
+    }
+
+    ///
+    /// returns true if there is a complete record available from file_pointer, false otherwhise.
+    /// panics if the record length couldn't be read.
     /// 
-
-    //
-    fn read_record_header(&self) -> Vec<u8> {
-        let retval = Vec::new();
-        // if file.read_exact_at(&mut buf, 0).is_err(){
-        //     println!("Error")
-        // }
-        // println!("{:?}", &buf);
-        retval   
+    fn has_next_record(&mut self) -> bool {
+        let bytes_available = self.bytes_available();
+        if bytes_available >= 2 { // rec_len portion of the header is available
+            let mut rec_len = [0u8;2];
+            // self.file.seek(SeekFrom::Start(self.file_pointer));
+            if self.file.read_exact(&mut rec_len).is_err(){
+                panic!("couldn't read REC_LEN from '{}@{}' eventhough 2 bytes are available!", self.file_path.file_name().unwrap().to_string_lossy(), self.file_pointer);
+            }
+            let tail_length = match self.file_endian {
+                Endian::Big => u16::from_be_bytes(rec_len),
+                Endian::Little => u16::from_le_bytes(rec_len),
+            };
+            if bytes_available >= (4 + tail_length) as u64 {
+                return true
+            }
+            return false
+        } 
+        false
     }
 
-    // This method returns true if there is a next complete record to be read
-    fn has_next(&self) -> bool{
-        true
-    }
+    ///
+    /// returns a vector containing the full record (without the 2 lengthbytes)
+    /// if no next record is available, it returns an empty vector
+    /// 
+    fn next_record(&mut self) -> Vec<u8> {
+        if self.has_next_record(){
+            let mut rec_len = [0u8;2]; 
+            self.file.read_exact(&mut rec_len).unwrap();
 
-    // This method returns true if there is a partial record to be read
-    fn has_partial_next(&self) -> bool{
-        true
-    }
-
-    // This method returns the next complete record in the form of a vector
-    // without moving the file_pointer
-    fn peek_next(&self) -> Vec<u8> {
+            let tail_length = match self.file_endian {
+                Endian::Big => u16::from_be_bytes(rec_len),
+                Endian::Little => u16::from_le_bytes(rec_len),
+            };
+            let mut vec = vec![0u8; (tail_length + 2)  as usize]; // REC_TYP & REC_SUB added
+            let bytes_read = self.file.read(vec.as_mut_slice()).unwrap();
+            if bytes_read != (tail_length+2) as usize {
+                panic!("WTF?")
+            }
+            self.file_pointer += (tail_length + 2) as u64;
+            return vec;
+        }
         Vec::new()
     }
 
-    ///
-    /// returns ture if there is at least a record header to be read
-    /// 
-    fn has_next_header(&self) -> bool {
-        true
-    }
+
+
 
     ///
-    /// returns how many bytes are ready to be read
-    ///
-    fn bytes_available(&mut self) -> u64 {
-        self.file.seek(SeekFrom::End(0)).unwrap() - self.file_pointer
+    /// returns true if there is at least a record header to be read
+    /// 
+    fn peek_next_record(&mut self) -> bool {
+        let bytes_available = self.bytes_available();
+        if bytes_available >= 2 { // rec_len portion of the header is available
+            // seek to file_pointer
+            self.file.seek(SeekFrom::Start(self.file_pointer)).unwrap();
+            // read rec_len_as_bytes
+            let mut rec_len_bytes = [0u8;2]; 
+            if self.file.read_exact(&mut rec_len_bytes).is_err(){
+                return false
+            }
+            let mut tail_length:usize = 0;
+            if cfg!(target_endian = "big") {
+                tail_length = u16::from_be_bytes(rec_len_bytes) as usize;
+            } else {
+                tail_length = u16::from_le_bytes(rec_len_bytes) as usize;
+            }
+            let mut vec = vec![0u8; tail_length + 2  as usize]; // REC_TYP & REC_SUB added
+            let bytes_read = self.file.read(vec.as_mut_slice()).unwrap();
+            println!("read = {} bytes", bytes_read);
+            println!("vec = {:?} {}", vec, vec.len());
+            println!("{}", self.file.stream_position().unwrap());
+
+
+            // let mut bytes = Vec::with_capacity(10).as_mut_slice();
+            // let mut bytes = vec![0u8; 20];
+            // if self.file.read_exact(bytes).is_err() {
+            //     println!("error");
+            // }
+            // println!("{:?}", bytes);
+
+            // let mut tial = vec![0u8; tail_length as usize];
+            // let a = self.file.read_exact(&mut tail);
+            // println!("{:?}", tail);
+            
+            
+
+
+
+            return true
+        }
+        false
     }
+
+
+    // fn get_next_record(&mut self) -> Vec<u8> {
+    //     let bytes_available = self.bytes_available();
+    //     if bytes_available >= 4 { // header is there
+    //         // seek to file_pointer
+    //         self.file.seek(SeekFrom::Start(self.file_pointer)).unwrap();
+    //         // read header
+    //         let mut rec_len = [0u8;2]; 
+    //         if self.file.read_exact(&mut rec_len).is_err(){
+    //             return false
+    //         }
+    //         // get the tail length
+    //         let mut tail_length:usize = 0;
+    //         if cfg!(target_endian = "big") {
+    //             tail_length = u16::from_be_bytes(rec_len) as usize;
+    //         } else {
+    //             tail_length = u16::from_le_bytes(rec_len) as usize;
+    //         }
+    //         // create a buffer for the record tail
+    //         let mut vec = vec![0u8; tail_length+4 as usize];
+    //         let count = self.file.read(vec.as_mut_slice()).unwrap();
+    //         println!("read = {} bytes", count);
+    //         println!("vec = {:?}", vec);
+    //         println!("{}", self.file.stream_position().unwrap());
+
+
+    //         // let mut bytes = Vec::with_capacity(10).as_mut_slice();
+    //         // let mut bytes = vec![0u8; 20];
+    //         // if self.file.read_exact(bytes).is_err() {
+    //         //     println!("error");
+    //         // }
+    //         // println!("{:?}", bytes);
+
+    //         // let mut tial = vec![0u8; tail_length as usize];
+    //         // let a = self.file.read_exact(&mut tail);
+    //         // println!("{:?}", tail);
+            
+            
+
+
+
+    //         return true
+    //     }
+    //     false
+    // }
+
 
 
 
@@ -147,8 +275,9 @@ impl std::fmt::Display for STDReader {
 
 fn main() -> Result<(), std::io::Error> {
     let mut stdr = STDReader::new("v93k.STD".to_string(), true)?;
-    let b = stdr.bytes_available();
-
-    println!("{}", b);
+    for i in 1..3 {
+        let rec = stdr.next_record();
+        println!("{} : {:?}", i, rec.len())
+    }
     Ok(())
 }
