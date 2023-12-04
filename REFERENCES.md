@@ -18,3 +18,6 @@
 - [web site](https://www.hdfgroup.org/)
 - [rust library](https://crates.io/crates/hdf5)
 - python library ?!?
+
+# Rust
+- endian
